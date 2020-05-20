@@ -1,8 +1,8 @@
 # covid-solver-unix
 This is the mac/linux universal version of the script used for automated docking in the [Open Science Project COVID-19](https://covid.si)
-It is used in conjunction with [pevecyan](https://github.com/pevecyan)'s [covid-solver-queue](https://github.com/pevecyan/covid-solver-queue)
+It is used in conjunction with [covid-solver-queue](https://github.com/COVID-si/covid-solver-queue)
 
-[Windows version](https://github.com/pevecyan/covid-solver-windows-)
+[Windows version](https://github.com/COVID-si/covid-solver-windows)
 
 ## Compiling
 To use the script as intended covid-solver.sh and RxDock/splitMols.dart have to be compiled with
@@ -65,30 +65,3 @@ This prevents the script from checking for updates. This should only be present 
 touch no.update
 ```
 
-## Changelog
-### v0.6
-- Changed autoupdate from default to optional
-- Added ability to set nice value
-- Changed docking software to RxDock
-- Added config to skip questions
-### v0.5   
-- Added multiple target support
-- Added periodic update check
-- Migrated server
-- Fixed update script call
-- Added update blocker
-- Added ability to pre-set save output and thread variables, thus making updates unnoticable
-### v0.4.1
-- Added update wizard
-- cURL is now silent
-- Added check to see if there are any more structures to calculate   
-### v0.4
-- Migrated from FTP server to cURL dedicated API  
-### v0.3
-- Added cleanup
-- Added user interaction
-- Added auto continue
-- Added thread checking and selection
-- Added file checking before updating counter
-### v0.2
-- Changed ftp from active to passive
