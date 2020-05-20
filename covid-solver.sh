@@ -11,7 +11,6 @@ Version="<GitHub Version Tag>"
 operatingsys="<mac/linux>" # Only valid options are mac or linux
 github_user="<GitHub User>"
 github_repo="<GitHub Repo>"
-zipkey="<zipkey>"
 #
 FirstLoopFinished=0
 #
@@ -161,7 +160,7 @@ main_func() {
         echo "The program will continue checking for new targets every 30mins"
         read -t 1800 -p "Press T to [t]erminate script or enter to recheck now..." empty
         case $empty in
-            [Tt]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdff $fx *.as *.prm temp; exit;;
+            [Tt]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm temp; exit;;
             *) echo "Rechecking..."; main_func;;
         esac
     done
@@ -188,7 +187,7 @@ main_func() {
         echo "The program will continue checking for new structures every 30mins"
         read -t 1800 -p "Press T to [t]erminate script or enter to recheck now..." empty
         case $empty in
-            [Tt]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdff $fx *.as *.prm temp; exit;;
+            [Tt]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm temp; exit;;
             *) echo "Rechecking..."; main_func;;
         esac
     done
@@ -197,8 +196,8 @@ main_func() {
     # STEP 2. DOWNLOAD A PACKAGE WITH LIGANDS
     #
     while true; do
-        curl -s --request POST -d "apikey=$apikey" -d "ZipFlag=1" $server/$tnum/file/down/$cnum --output $fx.zip
-        health=$(head -n 1 $fx) # Check if file is healthy
+        curl -s --request POST -d "apikey=$apikey" $server/$tnum/file/down/$cnum/?zipFlag=1 --output $fx.zip
+        health=$(head -n 1 $fx.zip) # Check if file is healthy
         if [[ -e $fx.zip ]] && ! [[ "$health" = *DOCTYPE* ]]; then
             unzip -o $fx.zip
             rm -f $fx.zip
@@ -207,7 +206,7 @@ main_func() {
             echo "Error downloading structure!"
             read -t 5 -p "Retrying in 5 sec... [A]bort " hp
             case $hp in
-                [Aa]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdff $fx *.as *.prm temp; exit;;
+                [Aa]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm temp; exit;;
                 *) echo "Retrying...";;
             esac
         fi
@@ -215,7 +214,7 @@ main_func() {
     #
     # STEP 3. DOWNLOAD TARGET
     #
-    if [ $FirstLoopFinished -eq 0 ] || ! [ -e TARGET_REF_$tnum.sdff -a -e TARGET_PRO_$tnum.mol2 -a -e TARGET_$tnum.as -a -e TARGET_$tnum.prm -a -e htvs.ptc ]; then
+    if [ $FirstLoopFinished -eq 0 ] || ! [ -e TARGET_REF_$tnum.sdf -a -e TARGET_PRO_$tnum.mol2 -a -e TARGET_$tnum.as -a -e TARGET_$tnum.prm -a -e htvs.ptc ]; then
         rm -f TARGET_PRO_$tnum_old.mol2 TARGET_REF_$tnum_old.sdf TARGET_$tnum_old.* htvs.ptc
         while true; do
             curl -s --request POST -d "apikey=$apikey" $server/$tnum/file/target/archive --output TARGET_$tnum.zip
@@ -228,7 +227,7 @@ main_func() {
                 echo "Error downloading target!"
                 read -t 5 -p "Retrying in 5 sec... [A]bort " hp
                 case $hp in
-                    [Aa]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdff $fx *.as *.prm temp htvs.ptc; exit;;
+                    [Aa]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm temp htvs.ptc; exit;;
                     *) echo "Retrying...";;
                 esac
             fi
@@ -273,7 +272,7 @@ main_func() {
         rm upload.zip
         zip -p $zipkey upload.zip $outfx.sdf
         echo "Uploading package $cnum for target $tnum"
-        curl -s --request POST -F "data=@upload.zip" -F "apikey=$apikey" $server/$tnum/file/$cnum -F "ClientGUID=$machineid" -F "ThreadCount=$parallels" -F "ZipFlag=1"
+        curl -s --request POST -F "data=@upload.zip" -F "apikey=$apikey" $server/$tnum/file/$cnum/?zipFlag=1 -F "ClientGUID=$machineid" -F "ThreadCount=$parallels" -F "Client=$operatingsys-CLI-$version"
         rm upload.zip
     else
         echo "Error: Writing output failed..."
