@@ -270,10 +270,9 @@ main_func() {
     #
     if [ -s "$outfx.sdf" ]; then
         rm upload.zip
-        zip -p $zipkey upload.zip $outfx.sdf
+        zipfile=$(zip - $outfx.sdf)
         echo "Uploading package $cnum for target $tnum"
-        curl -s --request POST -F "data=@upload.zip" -F "apikey=$apikey" $server/$tnum/file/$cnum/?zipFlag=1 -F "ClientGUID=$machineid" -F "ThreadCount=$parallels" -F "Client=$operatingsys-CLI-$version"
-        rm upload.zip
+        curl -s --request POST -F "data=$zipfile" -F "apikey=$apikey" $server/$tnum/file/$cnum/?zipFlag=1 -F "ClientGUID=$machineid" -F "ThreadCount=$parallels" -F "Client=$operatingsys-CLI-$version"
     else
         echo "Error: Writing output failed..."
     fi
