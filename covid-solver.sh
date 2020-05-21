@@ -35,7 +35,11 @@ export PATH="$PATH:$RBT_ROOT/bin"
 export PERL5LIB="$RBT_ROOT/lib:$PERL5LIB"
 # Set API key var
 apikey="<API Key>"
-server="<API Server" # DO NOT END WITH A SLASH!!!!!!!!!!!
+if [[ "$1" = "-test" ]]; then
+    server="<API Test Server>"
+else
+    server="<API Production Server>" # DO NOT END WITH A SLASH!!!!!!!!!!!
+fi
 #
 # Check for updates
 #
@@ -368,7 +372,7 @@ start_dialogue() {
 # Trap Ctrl-C
 #
 ctrlC() {
-    for process in "${pids[@]}"
+    for process in "${pids[@]}"; do
         kill -9 process
     done
     rm -rf $fx temp
