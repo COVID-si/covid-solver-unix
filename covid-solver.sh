@@ -7,7 +7,17 @@ exec > >(tee -ia last_run.log) 2>&1
 # Prototipna skripta za Citizen Science COVID-19 drug search
 # 30.3.2020
 #
-Version="<GitHub Version Tag>"
+ziptest=$(zip --help)
+if [[ "$ziptest" = *"zip: command not found"* ]]; then
+    echo "zip command not found, please install it from the appropriate"
+    echo "package manager, then restart the software."
+    echo "Exiting..."
+    exit 
+fi
+#
+#
+#
+Version="<Version Tag>" # Same as in GitHub
 operatingsys="<mac/linux>" # Only valid options are mac or linux
 github_user="<GitHub User>"
 github_repo="<GitHub Repo>"
@@ -22,7 +32,7 @@ if [[ $operatingsys = "mac" ]]; then
     machineid=$(ioreg -rd1 -c IOPlatformExpertDevice | awk '/IOPlatformUUID/ { split($0, line, "\""); printf("%s\n", line[4]); }')
 elif [[ $operatingsys = "linux" ]]; then
     threadCheckCommand="nproc"
-    machineid=$(cat /etc/machineid)
+    machineid=$(cat /etc/machine-id)
 else
     echo "Operating system not specified or invalid!"
     echo "Exiting..."
@@ -33,12 +43,13 @@ export RBT_ROOT="$PWD/RxDock"
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$RBT_ROOT/lib"
 export PATH="$PATH:$RBT_ROOT/bin"
 export PERL5LIB="$RBT_ROOT/lib:$PERL5LIB"
+export RBT_HOME="$PWD"
 # Set API key var
 apikey="<API Key>"
 if [[ "$1" = "-test" ]]; then
-    server="<API Test Server>"
+    server="<Test API URL>" # DO NOT END WITH A SLASH!!!!!!!!!!!
 else
-    server="<API Production Server>" # DO NOT END WITH A SLASH!!!!!!!!!!!
+    server="<Production API URL>" # DO NOT END WITH A SLASH!!!!!!!!!!!
 fi
 #
 # Check for updates
@@ -114,7 +125,7 @@ legal_disc() {
     echo "# GNU General Public License for more details."
     echo "#"
     echo "# THE AUTHORS (Žan Pevec, Gašper Tomšič, Marko Jukić, Črtomir Podlipnik"
-    echo "# and supporting organisations at the COVID.si project - www.covid.si)"
+    echo "# Boštjan Laba and supporting organisations at the COVID.si project)"
     echo "# DISCLAIM ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,"
     echo "# INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS.  IN"
     echo "# NO EVENT SHALL THE AUTHOR(S) BE LIABLE FOR ANY SPECIAL, INDIRECT OR"
@@ -145,7 +156,7 @@ main_func() {
     # STEP 1. CHECK THE COUNTER 
     #
     # Get target counter value
-    t=$(curl -s --request POST -d "apikey=$apikey" $server/target)
+    t=$(curl -s --request POST -d "apikey=$apikey" -d "ClientGUID=$machineid" -d "ThreadCount=$parallels" -d "Client=$operatingsys-CLI-$Version" $server/target)
     if [[ $t -eq $t ]]; then
         let tnum=$t
     else
@@ -169,8 +180,8 @@ main_func() {
         esac
     done
     # Get structure counter value
-    while TRUE; do
-        c=$(curl -s --request POST -d "apikey=$apikey" $server/$tnum/counter)
+    while :; do
+        c=$(curl -s --request POST -d "apikey=$apikey" -d "ClientGUID=$machineid" -d "ThreadCount=$parallels" -d "Client=$operatingsys-CLI-$Version" $server/$tnum/counter)
         if [[ $c -eq $c ]]; then
             let cnum=$c
             break
@@ -200,7 +211,7 @@ main_func() {
     # STEP 2. DOWNLOAD A PACKAGE WITH LIGANDS
     #
     while true; do
-        curl -s --request POST -d "apikey=$apikey" $server/$tnum/file/down/$cnum/?zipFlag=1 --output $fx.zip
+        curl -s --request POST -d "apikey=$apikey" -d "ClientGUID=$machineid" -d "ThreadCount=$parallels" -d "Client=$operatingsys-CLI-$Version" $server/$tnum/file/down/$cnum/?zipFlag=1 --output $fx.zip
         health=$(head -n 1 $fx.zip) # Check if file is healthy
         if [[ -e $fx.zip ]] && ! [[ "$health" = *DOCTYPE* ]]; then
             unzip -o $fx.zip
@@ -221,7 +232,7 @@ main_func() {
     if [ $FirstLoopFinished -eq 0 ] || ! [ -e TARGET_REF_$tnum.sdf -a -e TARGET_PRO_$tnum.mol2 -a -e TARGET_$tnum.as -a -e TARGET_$tnum.prm -a -e htvs.ptc ]; then
         rm -f TARGET_PRO_$tnum_old.mol2 TARGET_REF_$tnum_old.sdf TARGET_$tnum_old.* htvs.ptc
         while true; do
-            curl -s --request POST -d "apikey=$apikey" $server/$tnum/file/target/archive --output TARGET_$tnum.zip
+            curl -s --request POST -d "apikey=$apikey" -d "ClientGUID=$machineid" -d "ThreadCount=$parallels" -d "Client=$operatingsys-CLI-$Version" $server/$tnum/file/target/archive --output TARGET_$tnum.zip
             health=$(head -n 1 TARGET_$tnum.zip) # Check if file is healthy
             if [ -e TARGET_$tnum.zip ] && ! [[ "$health" = *DOCTYPE* ]]; then
                 unzip -o TARGET_$tnum.zip
@@ -249,34 +260,19 @@ main_func() {
     RxDock/splitMols $cnum $parallels $PWD #| tee split.log
     wait
     # Run RxDock
-    unix=1
     for file in temp/temp*sd
     do
-        if ! [[ $(tail -1 $file) = '$$$$' ]]; then
-            echo '$$$$' >> $file
-        fi
-        RxDock/bin/to_unix $file temp/unix_$unix.sd
-        rm -f "$file"
-        let unix=$unix+1
-    done
-    for file in temp/unix*sd
-    do
-        nice -n $niceNum rbdock -r $target_prm -p dock.prm -f htvs.ptc -i $file -o ${file%%.*}_out &
+        nice -n $niceNum RxDock/bin/rbdock -r $target_prm -p dock.prm -f htvs.ptc -i $file -o ${file%%.*}_out &
         pids+=" $!"
     done
     wait $pids
-    for file in temp/*_out*
-    do
-        cat $file >> $outfx.sdf
-    done
+    cat temp/*_out* > $outfx.sdf
     #
     # STEP 5. UPLOAD RESULTS TO SERVER
     #
     if [ -s "$outfx.sdf" ]; then
-        rm upload.zip
-        zipfile=$(zip - $outfx.sdf)
         echo "Uploading package $cnum for target $tnum"
-        curl -s --request POST -F "data=$zipfile" -F "apikey=$apikey" $server/$tnum/file/$cnum/?zipFlag=1 -F "ClientGUID=$machineid" -F "ThreadCount=$parallels" -F "Client=$operatingsys-CLI-$version"
+        zip - $outfx.sdf | curl -s --request POST -F "data=@-" -F "apikey=$apikey" -F "ClientGUID=$machineid" -F "ThreadCount=$parallels" -F "Client=$operatingsys-CLI-$Version"  $server/$tnum/file/$cnum/?zipFlag=1
     else
         echo "Error: Writing output failed..."
     fi
@@ -373,7 +369,7 @@ start_dialogue() {
 #
 ctrlC() {
     for process in "${pids[@]}"; do
-        kill -9 process
+        killall rbdock
     done
     rm -rf $fx temp
     if [ "$savdel" = "d" ]; then
