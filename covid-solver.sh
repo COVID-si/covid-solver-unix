@@ -258,9 +258,18 @@ main_func() {
     # Split the compound file for multiple threads
     mkdir -p temp
     RxDock/splitMols $cnum $parallels $PWD #| tee split.log
-    wait
     # Run RxDock
+    unix=1
     for file in temp/temp*sd
+    do
+        if ! [[ $(tail -1 $file) = '$$$$' ]]; then
+            echo '$$$$' >> $file
+        fi
+        RxDock/bin/to_unix $file temp/unix_$unix.sd
+        rm -f "$file"
+        let unix=$unix+1
+    done
+    for file in temp/unix*sd
     do
         nice -n $niceNum RxDock/bin/rbdock -r $target_prm -p dock.prm -f htvs.ptc -i $file -o ${file%%.*}_out &
         pids+=" $!"
@@ -368,8 +377,9 @@ start_dialogue() {
 # Trap Ctrl-C
 #
 ctrlC() {
+    echo "Terminating all RxDock instances..."
     for process in "${pids[@]}"; do
-        killall rbdock
+        killall rbdock >> last_run.log
     done
     rm -rf $fx temp
     if [ "$savdel" = "d" ]; then
