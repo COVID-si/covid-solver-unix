@@ -316,6 +316,7 @@ redo() {
 #
 start_dialogue() {
     echo "Welcome to COVID Solver $Version for Citizens Science!"
+    echo "Your Client ID is: $machineid"
     # Check threads
     threads=$($threadCheckCommand)
     if [ "$threads" -gt 0 ]; then
