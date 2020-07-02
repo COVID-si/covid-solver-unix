@@ -2,6 +2,7 @@
 #
 cd "${0%/*}"
 exec > >(tee -ia last_run.log) 2>&1
+start_time=$(date +%s)
 #
 # This is prototype script for OPENSCIENCE project 
 # Prototipna skripta za Citizen Science COVID-19 drug search
@@ -71,7 +72,6 @@ auto_update() {
 }
 version_check() {
     if ! [ -e no.update ]; then
-        start_time=$(date +%s)
         currentVersion="$(curl -s $versionCheckAPI | grep tag_name | cut -d '"' -f 4)"
         if ! [[ $Version = $currentVersion ]] && ! [[ $currentVersion = *DOCTYPE* ]]; then
             echo "Newer version of script found."
@@ -151,6 +151,7 @@ main_func() {
     fi
     if [[ $time_elapsed -gt 43200 ]]; then
         version_check
+        start_time=$(date +%s)
     fi
     #
     # STEP 1. CHECK THE COUNTER 
@@ -175,7 +176,7 @@ main_func() {
         echo "The program will continue checking for new targets every 30mins"
         read -t 1800 -p "Press T to [t]erminate script or enter to recheck now..." empty
         case $empty in
-            [Tt]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm temp; exit;;
+            [Tt]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm T$tnum-P$cnum; exit;;
             *) echo "Rechecking..."; main_func;;
         esac
     done
@@ -202,7 +203,7 @@ main_func() {
         echo "The program will continue checking for new structures every 30mins"
         read -t 1800 -p "Press T to [t]erminate script or enter to recheck now..." empty
         case $empty in
-            [Tt]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm temp; exit;;
+            [Tt]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm T$tnum-P$cnum; exit;;
             *) echo "Rechecking..."; main_func;;
         esac
     done
@@ -221,7 +222,7 @@ main_func() {
             echo "Error downloading structure!"
             read -t 5 -p "Retrying in 5 sec... [A]bort " hp
             case $hp in
-                [Aa]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm temp; exit;;
+                [Aa]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm T$tnum-P$cnum; exit;;
                 *) echo "Retrying...";;
             esac
         fi
@@ -229,7 +230,7 @@ main_func() {
     #
     # STEP 3. DOWNLOAD TARGET
     #
-    if [ $FirstLoopFinished -eq 0 ] || ! [ -e TARGET_REF_$tnum.sdf -a -e TARGET_PRO_$tnum.mol2 -a -e TARGET_$tnum.as -a -e TARGET_$tnum.prm -a -e htvs.ptc ]; then
+    if ! [ -e TARGET_REF_$tnum.sdf -a -e TARGET_PRO_$tnum.mol2 -a -e TARGET_$tnum.as -a -e TARGET_$tnum.prm -a -e htvs.ptc ]; then
         rm -f TARGET_PRO_$tnum_old.mol2 TARGET_REF_$tnum_old.sdf TARGET_$tnum_old.* htvs.ptc
         while true; do
             curl -s --request POST -d "apikey=$apikey" -d "ClientGUID=$machineid" -d "ThreadCount=$parallels" -d "Client=$operatingsys-CLI-$Version" $server/$tnum/file/target/archive --output TARGET_$tnum.zip
@@ -242,7 +243,7 @@ main_func() {
                 echo "Error downloading target!"
                 read -t 5 -p "Retrying in 5 sec... [A]bort " hp
                 case $hp in
-                    [Aa]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm temp htvs.ptc; exit;;
+                    [Aa]*) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm T$tnum-P$cnum htvs.ptc; exit;;
                     *) echo "Retrying...";;
                 esac
             fi
@@ -256,26 +257,29 @@ main_func() {
     outfx="output/OUT_T$tnum"'_'"$cnum"
     target_prm=TARGET_$tnum.prm
     # Split the compound file for multiple threads
-    mkdir -p temp
-    RxDock/splitMols $cnum $parallels $PWD #| tee split.log
+    mkdir -p T$tnum-P$cnum/temp
+    RxDock/splitMols $cnum $parallels $PWD/T$tnum-P$cnum/temp #| tee split.log
+    rm 3D_structures_$cnum.sdf
     # Run RxDock
     unix=1
-    for file in temp/temp*sd
+    for file in T$tnum-P$cnum/temp/temp*sdf
     do
         if ! [[ $(tail -1 $file) = '$$$$' ]]; then
             echo '$$$$' >> $file
         fi
-        RxDock/bin/to_unix $file temp/unix_$unix.sd
+        RxDock/bin/to_unix $file T$tnum-P$cnum/temp/unix_$unix.sd
         rm -f "$file"
         let unix=$unix+1
     done
-    for file in temp/unix*sd
+    unix=1
+    for file in T$tnum-P$cnum/temp/unix*sd
     do
-        nice -n $niceNum RxDock/bin/rbdock -r $target_prm -p dock.prm -f htvs.ptc -i $file -o ${file%%.*}_out &
+        nice -n $niceNum RxDock/bin/rbdock -r $target_prm -p dock.prm -f htvs.ptc -i $file -o T$tnum-P$cnum/temp/$unix\_out &
         pids+=" $!"
+        let unix=$unix+1
     done
     wait $pids
-    cat temp/*_out* > $outfx.sdf
+    cat T$tnum-P$cnum/temp/*_out* > $outfx.sdf
     #
     # STEP 5. UPLOAD RESULTS TO SERVER
     #
@@ -288,7 +292,7 @@ main_func() {
     #
     # STEP 6. CLEANUP
     #
-    rm -rf $fx temp
+    rm -rf $fx T$tnum-P$cnum
     if [ "$savdel" = "d" ]; then
         rm -f $outfx.sdf
     fi
@@ -301,7 +305,7 @@ redo() {
     read -t 10 -p "Would you like to calculate the next package? (Y/n) " yn
     case $yn in
         [Yy]* ) tnum_old=$tnum; main_func;;
-        [Nn]* ) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm temp htvs.ptc; exit;;
+        [Nn]* ) rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm T$tnum-P$cnum htvs.ptc; exit;;
         * ) main_func;;
     esac
     main_func
@@ -381,21 +385,17 @@ ctrlC() {
     for process in "${pids[@]}"; do
         killall rbdock >> last_run.log
     done
-    rm -rf $fx temp
+    rm -rf $fx T$tnum-P$cnum
     if [ "$savdel" = "d" ]; then
         rm -f $outfx.sdf
     fi
-    rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm temp htvs.ptc *.zip
+    rm -rf TARGET_PRO_$tnum.mol2 TARGET_REF_$tnum.sdf $fx *.as *.prm T$tnum-P$cnum htvs.ptc *.zip
     exit
 }
 trap ctrlC SIGINT
 
 version_check
 end_time=
-# Remove old split files if present
-if [[ -e temp/*split*.sd ]]; then
-    rm -f temp/*split*.sd
-fi
 # Check if user is root for negative nice
 if ! [[ "$EUID" -eq 0 ]]; then
     echo "Script is running as root!"
@@ -406,7 +406,6 @@ fi
 # Check if script was run by update.sh
 if [ -e settings.update ]; then
     FirstLoopFinished=1
-    start_time=$(date +%s)
     parallels="$(head -n 1 settings.update)"
     savdel="$(sed '2q;d' settings.update)"
     niceNum="$(sed '3q;d' settings.update)"
@@ -417,7 +416,6 @@ if [ -e settings.update ]; then
 elif [ -e rxdock.config ]; then
     echo "" > last_run.log
     legal_disc
-    start_time=$(date +%s)
     parallels="$(cat rxdock.config | grep threads | cut -d '=' -f 2)"
     if [[ "$parallels" =~ ^[0-9]+$ ]] && ! [[ "$parallels" -gt $(threadCheckCommand) ]]; then 
         if [[ "$(cat rxdock.config | grep save_output | cut -d '=' -f 2)" = [Tt][Rr][Uu][Ee] ]]; then    
